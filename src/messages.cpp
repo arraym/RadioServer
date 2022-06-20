@@ -21,7 +21,7 @@ Command::Command(uint8_t *data)
 {
    cmd = (Command_TypeDef)data[0];
    destAddress = data[1];
-   memcpy((uint8_t*)&crc, (uint8_t*)&data[2], CRC_SIZE);
+   crc = (uint16_t)(data[2] << 8) | data[3];
    memcpy(commandArray, data, COMMAND_SIZE);
    if(!Verify_CRC(data, COMMAND_SIZE))
       cmd = (Command_TypeDef)0xFF;
@@ -51,7 +51,7 @@ Command::Command(uint8_t *data)
  {
    rsp = (Response_TypeDef)data[0];
    memcpy((uint8_t*)&payload, (uint8_t*)&data[1], PAYLOAD_SIZE);
-   memcpy((uint8_t*)&crc, (uint8_t*)&data[5], CRC_SIZE);
+   crc = (uint16_t)(data[5] << 8) | data[6];
    memcpy(responseArray, data, RESPONSE_SIZE);
    if(!Verify_CRC(data, RESPONSE_SIZE))
       rsp = NACK;
@@ -102,13 +102,14 @@ Command::Command(uint8_t *data)
  bool Verify_CRC(uint8_t *data, uint8_t size)
  {
    uint16_t crcValue = 0;
+   uint16_t receivedCrc = (uint16_t)(data[size - 2] << 8) | data[size - 1];
    CRC16 crc;
 
    crc.setPolynome(0x1021);
    crc.add(data, (uint16_t)(size - CRC_SIZE));
    crcValue = crc.getCRC();
 
-   if(memcmp((uint8_t*)&crcValue, (uint8_t*)&data[size - CRC_SIZE], CRC_SIZE) != 0)
+   if(crcValue != receivedCrc)
       return false;
 
    return true;

@@ -9,7 +9,9 @@
 #define SENSOR1     0x01        // Sensor1 destination address
 #define SENSOR2     0x02        // Sensor2 destination address
 
-RH_ASK driver(2000, 4, 5, 0);   // ESP8266 or ESP32: do not use pin 11 or 2
+#define DELAY_INT   3000        // Time delay between commands
+
+RH_ASK driver(2000, 5, 4, 0);   // ESP8266 or ESP32: do not use pin 11 or 2
 
 void setup()
 {
@@ -26,9 +28,29 @@ void setup()
 
 void loop()
 {
-    Command myCommand(GET_TEMPERATURE, SENSOR1);
+    uint8_t buf[RESPONSE_SIZE];
+    uint8_t buflen = sizeof(buf);
+
+    Command myCommand(GET_HUMIDITY, SENSOR1);
 
     driver.send(myCommand.commandArray, COMMAND_SIZE);
     driver.waitPacketSent();
-    delay(1000);
+
+    if(driver.waitAvailableTimeout(DELAY_INT))
+    {
+        driver.recv(buf, &buflen);
+        driver.printBuffer("Got: ", buf, buflen);
+        Response recvResponse(buf);
+        if(recvResponse.rsp == ACK)
+        {
+            Serial.print("Umiditate: ");
+            Serial.print(recvResponse.payload, DEC);
+            Serial.println("%");
+        }
+        else
+        {
+            Serial.println("Error, resending command!");
+        }
+    }
+    delay(2000);
 }
