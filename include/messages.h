@@ -14,7 +14,8 @@
 typedef enum
 {
     GET_TEMPERATURE     = ((uint8_t)0xA0),
-    GET_HUMIDITY        = ((uint8_t)0xA1)
+    GET_HUMIDITY        = ((uint8_t)0xA1),
+    NO_COMMAND          = ((uint8_t)0xFF)
 } Command_TypeDef;
 
 typedef enum

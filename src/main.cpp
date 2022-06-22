@@ -22,7 +22,7 @@
 #define SENSOR2     0x02        // Sensor2 destination address
 #define SENSOR3     0x03
 
-#define SENSOR_TIME 1000        // Time to wait for sensor response
+#define SENSOR_TIME 3000        // Time to wait for sensor response
 
 void Send_Command(Command_TypeDef cmd, uint8_t address);
 
@@ -108,7 +108,7 @@ void Send_Command(Command_TypeDef cmd, uint8_t address)
         if (millis() - startTime > SENSOR_TIME - 1)
         {
             Serial.println("Unavailable!");
-            tft.setTextColor(ST7735_ORANGE);
+            tft.setTextColor(ST7735_RED);
             tft.println("Unavailable!");
             return;
         }
@@ -148,6 +148,8 @@ void Send_Command(Command_TypeDef cmd, uint8_t address)
     }
     else
     {
-        Serial.println("Error!");
+        Serial.println("Read error!");
+        tft.setTextColor(ST7735_ORANGE);
+        tft.println("Read error!");
     }
 }
