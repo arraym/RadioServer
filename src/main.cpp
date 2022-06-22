@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ESP8266WiFi.h>
 #include "messages.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
@@ -22,9 +23,11 @@
 #define SENSOR2     0x02        // Sensor2 destination address
 #define SENSOR3     0x03
 
-#define SENSOR_TIME 3000        // Time to wait for sensor response
+#define SENSOR_TIME 5000        // Time to wait for sensor response
 
 void Send_Command(Command_TypeDef cmd, uint8_t address);
+void Init_WiFi();
+void Make_IFTTTRequest(String sensorName, float value1, float value2);
 
 typedef struct
 {
@@ -41,7 +44,14 @@ Sensor_HandleTypeDef sensorArray[] = {
 RH_ASK driver(2000, RX_PIN, TX_PIN, PTT_PIN);  
                                 // ESP8266 or ESP32: do not use pin 11 or 2
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+
+const char* ssid     = "your_ssid";         // Write your SSID
+const char* password = "your_password"; //Write your Password
+const char* IFTTT_URL = "/with/key/cIfUuE0QZEZnYxkhn3VLJmyheKM9wRcqNczNkfbZw2G";
+const char* server = "maker.ifttt.com";
 unsigned long startTime;
+float tempValue = 0;
+float hdtValue = 0;
 
 void setup()
 {
@@ -60,6 +70,8 @@ void setup()
     tft.fillScreen(ST7735_BLACK);
     tft.setTextSize(1);
     tft.setRotation(DEFAULT_ROT);
+
+    Init_WiFi();
 }
 
 void loop()
@@ -79,9 +91,12 @@ void loop()
         tft.setTextColor(ST7735_CYAN);
         tft.setTextSize(1);
         Send_Command(GET_TEMPERATURE, sensorArray[i].address);
-        delay(SENSOR_TIME);
+        delay(2000);
         tft.setTextColor(ST7735_CYAN);
-        Send_Command(GET_HUMIDITY, sensorArray[i].address);           
+        Send_Command(GET_HUMIDITY, sensorArray[i].address); 
+        Make_IFTTTRequest(sensorArray[i].name, tempValue, hdtValue);
+        tempValue = 0;
+        hdtValue = 0;        
     }
 
     delay(2000);
@@ -122,23 +137,23 @@ void Send_Command(Command_TypeDef cmd, uint8_t address)
         {
         case GET_TEMPERATURE:
         {
-            float temperature = (float)newResponse.payload / 100;
+            tempValue = (float)newResponse.payload / 100;
             Serial.print("Temperature: ");
-            Serial.print(temperature, 2);
+            Serial.print(tempValue, 2);
             Serial.println("*C");
             tft.print("Temp: ");
-            tft.print(temperature, 2);
+            tft.print(tempValue, 2);
             tft.println("*C");
             break;
         }
         case GET_HUMIDITY:
         {
-            float humidity = (float)newResponse.payload / 100;
+            hdtValue = (float)newResponse.payload / 100;
             Serial.print("Humidity: ");
-            Serial.print(humidity, 2);
+            Serial.print(hdtValue, 2);
             Serial.println("%");
             tft.print("Hdt: ");
-            tft.print(humidity, 2);
+            tft.print(hdtValue, 2);
             tft.println("%");
             break;
         }
@@ -151,5 +166,112 @@ void Send_Command(Command_TypeDef cmd, uint8_t address)
         Serial.println("Read error!");
         tft.setTextColor(ST7735_ORANGE);
         tft.println("Read error!");
+        tempValue = 0;
+        hdtValue = 0;
     }
+}
+
+/**
+  * @brief	Initializes and connects to WiFi
+  * @param	None
+  * @retval	None
+  */
+void Init_WiFi()
+{
+    Serial.print("Connecting "); 
+    tft.setTextColor(ST7735_CYAN);
+    tft.println("WiFi connecting...");
+    WiFi.begin(ssid, password);  
+
+    int timeout = 10;       // 10 seconds
+    while(WiFi.status() != WL_CONNECTED  && (timeout-- > 0))
+    {
+        delay(1000);
+        Serial.print(".");
+    }
+    Serial.println("");
+
+    if(WiFi.status() != WL_CONNECTED)
+    {
+        Serial.println("Failed to connect!");
+        tft.setTextColor(ST7735_RED);
+        tft.println("Failed!");
+        delay(2000);
+        return;
+    }
+
+    Serial.print("WiFi connected in: "); 
+    Serial.print(millis());
+    Serial.print(", IP address: "); 
+    Serial.println(WiFi.localIP());
+    tft.setTextColor(ST7735_GREEN);
+    tft.println("Connected!");
+    delay(2000);
+}
+
+/**
+  * @brief	Makes a IFTTT request sending data to google sheets
+  * @param	sensorName - name of the sensor
+  * @retval	None
+  */
+void Make_IFTTTRequest(String sensorName, float value1, float value2)
+{
+    if (WiFi.status () != WL_CONNECTED)
+    {
+        Serial.println("WiFi not connected!");
+        return;
+    }
+
+    if (value1 == 0 or value2 == 0)
+    {
+        Serial.println("Bad sensor reading!");
+        return;
+    }
+    
+    
+    Serial.print("Connecting to "); 
+    Serial.print(server);
+
+    WiFiClient client;
+    int retries = 5;
+    while(!!!client.connect(server, 80) && (retries-- > 0))
+    {
+        Serial.print(".");
+    }
+    Serial.println();
+    if(!!!client.connected())
+    {
+        Serial.println("Failed to connect...");
+    }
+
+    Serial.print("Request resource: "); 
+    Serial.println(IFTTT_URL);
+
+    String jsonObject = String("{\"value1\":\"") + value1 + "\",\"value2\":\"" + value2 + "\"}";
+                        
+                        
+    client.println(String("POST ") + "/trigger/DHT22_" + sensorName + IFTTT_URL + " HTTP/1.1");
+    client.println(String("Host: ") + server); 
+    client.println("Connection: close\r\nContent-Type: application/json");
+    client.print("Content-Length: ");
+    client.println(jsonObject.length());
+    client.println();
+    client.println(jsonObject);
+        
+    int timeout = 5 * 10; // 5 seconds             
+    while(!!!client.available() && (timeout-- > 0))
+    {
+        delay(100);
+    }
+    if(!!!client.available())
+    {
+        Serial.println("No response...");
+    }
+    while(client.available())
+    {
+        Serial.write(client.read());
+    }
+
+    Serial.println("\nClosing Connection");
+    client.stop(); 
 }
